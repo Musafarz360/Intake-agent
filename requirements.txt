@@ -6,3 +6,4 @@ flask~=3.0
 requests~=2.31
 google-cloud-speech~=2.21
 google-cloud-texttospeech~=2.16
+deepgram-sdk~=2.12
