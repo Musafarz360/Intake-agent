@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Outbound Caller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-blue-600 text-white shadow-lg">
+        <div class="container mx-auto px-6 py-6">
+            <h1 class="text-2xl font-bold">📞 Outbound Caller</h1>
+            <p class="text-blue-100">AI Medical Pre-Screening Agent</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- Call Control Panel -->
+            <div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-phone-alt text-blue-600 mr-2"></i>
+                        Make a Call
+                    </h2>
+                    
+                    <form id="callForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Patient Phone Number
+                            </label>
+                            <input 
+                                type="tel" 
+                                id="phoneNumber" 
+                                placeholder="+1 (555) 123-4567"
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                required
+                            >
+                        </div>
+                        
+                        <button 
+                            type="submit" 
+                            id="callButton"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                        >
+                            <i class="fas fa-phone-alt mr-2"></i>
+                            Start Medical Screening Call
+                        </button>
+                    </form>
+                    
+                    <!-- Call Status -->
+                    <div id="callStatus" class="mt-4 hidden">
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                            <p id="statusMessage" class="text-sm text-blue-700"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Call Notes -->
+            <div>
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                        <i class="fas fa-sticky-note text-green-500 mr-2"></i>
+                        Recent Call Notes
+                    </h3>
+                    <div id="recentNotes" class="space-y-3">
+                        <div class="text-sm text-gray-500">Loading recent notes...</div>
+                    </div>
+                    <button 
+                        onclick="loadCallNotes()"
+                        class="w-full mt-4 bg-green-100 hover:bg-green-200 text-green-700 font-medium py-2 px-4 rounded transition-colors"
+                    >
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Refresh Notes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCallNotes();
+        });
+
+        // Handle call form submission
+        document.getElementById('callForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            
+            if (!phoneNumber) {
+                showStatus('Please enter a phone number', 'error');
+                return;
+            }
+            
+            // Disable button and show loading
+            const callButton = document.getElementById('callButton');
+            callButton.disabled = true;
+            callButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Initiating Call...';
+            
+            try {
+                const response = await fetch('/make_call', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone_number: phoneNumber
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(`Call dispatched successfully!`, 'success');
+                    document.getElementById('callForm').reset();
+                } else {
+                    showStatus(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Network error: ${error.message}`, 'error');
+            } finally {
+                // Re-enable button
+                callButton.disabled = false;
+                callButton.innerHTML = '<i class="fas fa-phone-alt mr-2"></i>Start Medical Screening Call';
+            }
+        });
+
+        // Show status message
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('callStatus');
+            const statusMessage = document.getElementById('statusMessage');
+            
+            statusMessage.textContent = message;
+            statusDiv.className = `mt-4 ${type === 'error' ? 'bg-red-50 border-red-400' : 'bg-green-50 border-green-400'}`;
+            statusDiv.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Load call notes
+        async function loadCallNotes() {
+            try {
+                const response = await fetch('/call_notes');
+                const notes = await response.json();
+                
+                const notesContainer = document.getElementById('recentNotes');
+                
+                if (notes.length > 0) {
+                    const recentNotes = notes.slice(0, 5); // Show 5 most recent
+                    let notesHTML = '';
+                    
+                    recentNotes.forEach(note => {
+                        const timestamp = new Date(note.timestamp).toLocaleString();
+                        const patientName = note.patient_info?.name || 'Unknown Patient';
+                        const phoneNumber = note.phone_number || 'No phone';
+                        const reason = note.patient_info?.reason_for_visit || 'No reason provided';
+                        
+                        notesHTML += `
+                            <div class="bg-gray-50 rounded p-3 border-l-4 border-green-500">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="font-medium text-gray-800">${patientName}</div>
+                                        <div class="text-sm text-gray-600">📞 ${phoneNumber}</div>
+                                        <div class="text-sm text-gray-700">🏥 ${reason}</div>
+                                        <div class="text-xs text-gray-500">⏰ ${timestamp}</div>
+                                    </div>
+                                    <button 
+                                        onclick="viewNoteDetails('${note.file_name}')"
+                                        class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition-colors"
+                                    >
+                                        View Details
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    notesContainer.innerHTML = notesHTML;
+                } else {
+                    notesContainer.innerHTML = '<div class="text-sm text-gray-500">No call notes yet</div>';
+                }
+            } catch (error) {
+                document.getElementById('recentNotes').innerHTML = '<div class="text-sm text-red-500">Error loading notes</div>';
+            }
+        }
+
+        // View detailed note information
+        async function viewNoteDetails(filename) {
+            try {
+                const response = await fetch(`/view_note/${filename}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const note = result.note;
+                    const patientInfo = note.patient_info || {};
+                    
+                    // Create detailed view
+                    const detailsHTML = `
+                        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-semibold text-gray-800">Call Details</h3>
+                                    <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700">
+                                        <i class="fas fa-times text-xl"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="space-y-4">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Patient Name</label>
+                                            <div class="mt-1 p-2 bg-gray-50 rounded border">${patientInfo.name || 'Not provided'}</div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+                                            <div class="mt-1 p-2 bg-gray-50 rounded border">${note.phone_number || 'Not provided'}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Main Reason for Visit</label>
+                                        <div class="mt-1 p-2 bg-gray-50 rounded border">${patientInfo.reason_for_visit || 'Not provided'}</div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Current Medications</label>
+                                        <div class="mt-1 p-2 bg-gray-50 rounded border">${patientInfo.medications || 'None'}</div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Call Timestamp</label>
+                                        <div class="mt-1 p-2 bg-gray-50 rounded border">${new Date(note.timestamp).toLocaleString()}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-6 flex justify-end">
+                                    <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded transition-colors">
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Add to page
+                    document.body.insertAdjacentHTML('beforeend', detailsHTML);
+                } else {
+                    showStatus(`Error loading note: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error viewing note: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
