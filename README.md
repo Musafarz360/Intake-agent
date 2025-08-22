@@ -57,11 +57,7 @@ A professional AI-powered medical intake system that conducts pre-visit screenin
    # Edit .env.local with your API keys
    ```
 
-4. **Configure credentials**
-   ```bash
-   cp google-credentials.example.json google-credentials.json
-   # Add your Google Cloud service account credentials
-   ```
+
 
 ### **Environment Variables**
 ```env
@@ -74,7 +70,6 @@ LIVEKIT_API_SECRET=your_livekit_api_secret
 SIP_OUTBOUND_TRUNK_ID=your_sip_trunk_id
 
 # Google Cloud
-GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json
 GOOGLE_API_KEY=your_gemini_api_key
 
 # Deepgram
@@ -265,7 +260,7 @@ tts=deepgram.TTS(
 - **Compliance**: HIPAA-aware data handling
 
 ### **Best Practices**
-- Never commit `.env.local` or `google-credentials.json`
+- Never commit `.env.local` or any credential files
 - Use strong API keys and rotate regularly
 - Monitor API usage and quotas
 - Secure your LiveKit instance
