@@ -1,6 +1,6 @@
-<a href="https://livekit.io/">
+<!-- <a href="https://livekit.io/">
   <img src="./.github/assets/livekit-mark.png" alt="LiveKit logo" width="100" height="100">
-</a>
+</a> -->
 
 # Medical Intake AI Agent System
 
@@ -290,17 +290,10 @@ tts=deepgram.TTS(
 ### **Development Setup**
 1. Fork the repository
 2. Create feature branch
-3. Make changes with tests
+3. Make changes
 4. Submit pull request
 
-### **Testing**
-```bash
-# Run agent tests
-python -m pytest tests/
 
-# Test specific components
-python -m pytest tests/test_agent.py
-```
 
 ## 📄 License
 
