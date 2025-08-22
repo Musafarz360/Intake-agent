@@ -1,9 +1,6 @@
 livekit>=1.0
-livekit-agents[google,silero,turn_detector]~=1.2
+livekit-agents[deepgram,silero,turn_detector]~=1.2
 livekit-plugins-noise-cancellation~=0.2
 python-dotenv~=1.0
-flask~=3.0
-requests~=2.31
-google-cloud-speech~=2.21
-google-cloud-texttospeech~=2.16
 deepgram-sdk~=2.12
+flask~=3.0

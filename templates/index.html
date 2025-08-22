@@ -11,27 +11,72 @@
     <!-- Header -->
     <header class="bg-blue-600 text-white shadow-lg">
         <div class="container mx-auto px-6 py-6">
-            <h1 class="text-2xl font-bold">📞 Outbound Caller</h1>
-            <p class="text-blue-100">AI Medical Pre-Screening Agent</p>
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold">📞 Outbound Caller</h1>
+                    <p class="text-blue-100 text-lg">AI Medical Pre-Screening Agent</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-2xl font-bold" id="currentTime"></div>
+                    <div class="text-blue-200">Live Dashboard</div>
+                </div>
+            </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="container mx-auto px-6 py-8">
+    <div class="container mx-auto px-6 py-8">
+        <!-- Tab Navigation -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8">
+                    <button 
+                        id="immediateCallTab"
+                        onclick="switchTab('immediate')"
+                        class="py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600"
+                    >
+                        <i class="fas fa-phone-alt mr-2"></i>
+                        Immediate Call
+                    </button>
+                    <button 
+                        id="scheduleCallTab"
+                        onclick="switchTab('schedule')"
+                        class="py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                    >
+                        <i class="fas fa-clock mr-2"></i>
+                        Schedule Call
+                    </button>
+                </nav>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
             <!-- Call Control Panel -->
             <div>
-                <div class="bg-white rounded-lg shadow-lg p-6">
+                <!-- Immediate Call Form -->
+                <div id="immediateCallPanel" class="bg-white rounded-lg shadow-lg p-6">
                     <h2 class="text-xl font-bold text-gray-800 mb-4">
                         <i class="fas fa-phone-alt text-blue-600 mr-2"></i>
-                        Make a Call
+                        Make Immediate Call
                     </h2>
                     
                     <form id="callForm" class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">
-                                Patient Phone Number
+                                <i class="fas fa-user mr-2"></i>Patient Name (Optional)
+                            </label>
+                            <input 
+                                type="text" 
+                                id="patientName" 
+                                placeholder="Enter patient name"
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-phone mr-2"></i>Phone Number
                             </label>
                             <input 
                                 type="tel" 
@@ -40,6 +85,29 @@
                                 class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 required
                             >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-flag mr-2"></i>Priority
+                            </label>
+                            <select id="priority" class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <option value="normal">Normal</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-sticky-note mr-2"></i>Notes (Optional)
+                            </label>
+                            <textarea 
+                                id="notes" 
+                                rows="3"
+                                placeholder="Any special notes for this call..."
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            ></textarea>
                         </div>
                         
                         <button 
@@ -59,15 +127,119 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Schedule Call Form -->
+                <div id="scheduleCallPanel" class="bg-white rounded-lg shadow-lg p-6 hidden">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-clock text-green-600 mr-2"></i>
+                        Schedule Future Call
+                    </h2>
+                    
+                    <form id="scheduleForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-user mr-2"></i>Patient Name (Optional)
+                            </label>
+                            <input 
+                                type="text" 
+                                id="schedulePatientName" 
+                                placeholder="Enter patient name"
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-phone mr-2"></i>Phone Number
+                            </label>
+                            <input 
+                                type="tel" 
+                                id="schedulePhoneNumber" 
+                                placeholder="+1 (555) 123-4567"
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                required
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-calendar-alt mr-2"></i>Date & Time
+                            </label>
+                            <input 
+                                type="datetime-local" 
+                                id="scheduleDateTime" 
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                required
+                            >
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-flag mr-2"></i>Priority
+                            </label>
+                            <select id="schedulePriority" class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <option value="normal">Normal</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-sticky-note mr-2"></i>Notes (Optional)
+                            </label>
+                            <textarea 
+                                id="scheduleNotes" 
+                                rows="3"
+                                placeholder="Any special notes for this scheduled call..."
+                                class="w-full px-4 py-2 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            ></textarea>
+                        </div>
+                        
+                        <button 
+                            type="submit" 
+                            id="scheduleButton"
+                            class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                        >
+                            <i class="fas fa-clock mr-2"></i>
+                            Schedule Call
+                        </button>
+                    </form>
+                    
+                    <!-- Schedule Status -->
+                    <div id="scheduleStatus" class="mt-4 hidden">
+                        <div class="bg-green-50 border-l-4 border-green-400 p-3 rounded">
+                            <p id="scheduleMessage" class="text-sm text-green-700"></p>
+                        </div>
+                    </div>
+                </div>
             </div>
             
-            <!-- Call Notes -->
+            <!-- Call Notes and Scheduled Calls -->
             <div>
-                <div class="bg-white rounded-lg shadow-lg p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">
-                        <i class="fas fa-sticky-note text-green-500 mr-2"></i>
-                        Recent Call Notes
-                    </h3>
+                <!-- Notes/Scheduled Calls Tabs -->
+                <div class="bg-white rounded-lg shadow-lg">
+                    <div class="flex border-b">
+                        <button 
+                            id="notesTabBtn"
+                            onclick="switchRightTab('notes')"
+                            class="flex-1 px-4 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-500"
+                        >
+                            <i class="fas fa-sticky-note mr-2"></i>
+                            Call Notes
+                        </button>
+                        <button 
+                            id="scheduledTabBtn"
+                            onclick="switchRightTab('scheduled')"
+                            class="flex-1 px-4 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700"
+                        >
+                            <i class="fas fa-calendar-alt mr-2"></i>
+                            Scheduled Calls
+                        </button>
+                    </div>
+                    
+                    <!-- Call Notes Panel -->
+                    <div id="notesPanel" class="p-6">
                     <div id="recentNotes" class="space-y-3">
                         <div class="text-sm text-gray-500">Loading recent notes...</div>
                     </div>
@@ -78,22 +250,93 @@
                         <i class="fas fa-sync-alt mr-2"></i>
                         Refresh Notes
                     </button>
+                    </div>
+                    
+                    <!-- Scheduled Calls Panel -->
+                    <div id="scheduledPanel" class="p-6 hidden">
+                        <div id="scheduledCalls" class="space-y-3">
+                            <div class="text-sm text-gray-500">Loading scheduled calls...</div>
+                        </div>
+                        <button 
+                            onclick="loadScheduledCalls()"
+                            class="w-full mt-4 bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium py-2 px-4 rounded transition-colors"
+                        >
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Refresh Scheduled
+                        </button>
+                    </div>
+                </div>
                 </div>
             </div>
         </div>
-    </main>
 
     <script>
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             loadCallNotes();
+            loadScheduledCalls();
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+            
+            // Set minimum datetime to current time
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('scheduleDateTime').min = now.toISOString().slice(0, 16);
         });
+
+        // Update current time
+        function updateCurrentTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString();
+        }
+
+        // Tab switching functions
+        function switchTab(tab) {
+            const immediateTab = document.getElementById('immediateCallTab');
+            const scheduleTab = document.getElementById('scheduleCallTab');
+            const immediatePanel = document.getElementById('immediateCallPanel');
+            const schedulePanel = document.getElementById('scheduleCallPanel');
+            
+            if (tab === 'immediate') {
+                immediateTab.className = 'py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600';
+                scheduleTab.className = 'py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700';
+                immediatePanel.classList.remove('hidden');
+                schedulePanel.classList.add('hidden');
+            } else {
+                immediateTab.className = 'py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700';
+                scheduleTab.className = 'py-2 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600';
+                immediatePanel.classList.add('hidden');
+                schedulePanel.classList.remove('hidden');
+            }
+        }
+
+        function switchRightTab(tab) {
+            const notesBtn = document.getElementById('notesTabBtn');
+            const scheduledBtn = document.getElementById('scheduledTabBtn');
+            const notesPanel = document.getElementById('notesPanel');
+            const scheduledPanel = document.getElementById('scheduledPanel');
+            
+            if (tab === 'notes') {
+                notesBtn.className = 'flex-1 px-4 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-500';
+                scheduledBtn.className = 'flex-1 px-4 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700';
+                notesPanel.classList.remove('hidden');
+                scheduledPanel.classList.add('hidden');
+            } else {
+                notesBtn.className = 'flex-1 px-4 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700';
+                scheduledBtn.className = 'flex-1 px-4 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-500';
+                notesPanel.classList.add('hidden');
+                scheduledPanel.classList.remove('hidden');
+            }
+        }
 
         // Handle call form submission
         document.getElementById('callForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const phoneNumber = document.getElementById('phoneNumber').value;
+            const patientName = document.getElementById('patientName').value;
+            const priority = document.getElementById('priority').value;
+            const notes = document.getElementById('notes').value;
             
             if (!phoneNumber) {
                 showStatus('Please enter a phone number', 'error');
@@ -112,14 +355,17 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        phone_number: phoneNumber
+                        phone_number: phoneNumber,
+                        patient_name: patientName,
+                        priority: priority,
+                        notes: notes
                     })
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    showStatus(`Call dispatched successfully!`, 'success');
+                    showStatus(`Call dispatched successfully! ${result.message}`, 'success');
                     document.getElementById('callForm').reset();
                 } else {
                     showStatus(`Error: ${result.error}`, 'error');
@@ -133,19 +379,172 @@
             }
         });
 
+        // Handle schedule form submission
+        document.getElementById('scheduleForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const phoneNumber = document.getElementById('schedulePhoneNumber').value;
+            const patientName = document.getElementById('schedulePatientName').value;
+            const dateTime = document.getElementById('scheduleDateTime').value;
+            const priority = document.getElementById('schedulePriority').value;
+            const notes = document.getElementById('scheduleNotes').value;
+            
+            if (!phoneNumber || !dateTime) {
+                showScheduleStatus('Please enter phone number and date/time', 'error');
+                return;
+            }
+            
+            // Check if time is in the future
+            const scheduledTime = new Date(dateTime);
+            const now = new Date();
+            if (scheduledTime <= now) {
+                showScheduleStatus('Please select a future date and time', 'error');
+                return;
+            }
+            
+            // Disable button and show loading
+            const scheduleButton = document.getElementById('scheduleButton');
+            scheduleButton.disabled = true;
+            scheduleButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Scheduling Call...';
+            
+            try {
+                const response = await fetch('/schedule_call', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        phone_number: phoneNumber,
+                        patient_name: patientName,
+                        scheduled_time: scheduledTime.toISOString(),
+                        priority: priority,
+                        notes: notes
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showScheduleStatus(`Call scheduled successfully! ${result.message}`, 'success');
+                    document.getElementById('scheduleForm').reset();
+                    loadScheduledCalls(); // Refresh the scheduled calls list
+                } else {
+                    showScheduleStatus(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showScheduleStatus(`Network error: ${error.message}`, 'error');
+            } finally {
+                // Re-enable button
+                scheduleButton.disabled = false;
+                scheduleButton.innerHTML = '<i class="fas fa-clock mr-2"></i>Schedule Call';
+            }
+        });
+
         // Show status message
         function showStatus(message, type) {
             const statusDiv = document.getElementById('callStatus');
-            const statusMessage = document.getElementById('statusMessage');
+            const messageP = document.getElementById('statusMessage');
             
-            statusMessage.textContent = message;
-            statusDiv.className = `mt-4 ${type === 'error' ? 'bg-red-50 border-red-400' : 'bg-green-50 border-green-400'}`;
+            messageP.textContent = message;
             statusDiv.classList.remove('hidden');
             
             // Auto-hide after 5 seconds
             setTimeout(() => {
                 statusDiv.classList.add('hidden');
             }, 5000);
+        }
+
+        // Show schedule status message
+        function showScheduleStatus(message, type) {
+            const statusDiv = document.getElementById('scheduleStatus');
+            const messageP = document.getElementById('scheduleMessage');
+            
+            messageP.textContent = message;
+            statusDiv.classList.remove('hidden');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Load scheduled calls
+        async function loadScheduledCalls() {
+            try {
+                const response = await fetch('/scheduled_calls');
+                const scheduledCalls = await response.json();
+                
+                const scheduledContainer = document.getElementById('scheduledCalls');
+                
+                if (scheduledCalls && scheduledCalls.length > 0) {
+                    let callsHTML = '';
+                    scheduledCalls.forEach(call => {
+                        const patientName = call.patient_name || 'Unknown Patient';
+                        const phoneNumber = call.phone_number || 'No number';
+                        const scheduledTime = new Date(call.scheduled_time).toLocaleString();
+                        const priority = call.priority || 'normal';
+                        const status = call.status || 'unknown';
+                        
+                        const statusColors = {
+                            'scheduled': 'bg-blue-50 border-blue-500 text-blue-700',
+                            'executing': 'bg-yellow-50 border-yellow-500 text-yellow-700',
+                            'completed': 'bg-green-50 border-green-500 text-green-700',
+                            'failed': 'bg-red-50 border-red-500 text-red-700',
+                            'cancelled': 'bg-gray-50 border-gray-500 text-gray-700'
+                        };
+                        
+                        const statusColor = statusColors[status] || 'bg-gray-50 border-gray-500 text-gray-700';
+                        
+                        callsHTML += `
+                            <div class="${statusColor} rounded p-3 border-l-4">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="font-medium">${patientName}</div>
+                                        <div class="text-sm">📞 ${phoneNumber}</div>
+                                        <div class="text-sm">🕐 ${scheduledTime}</div>
+                                        <div class="text-xs">Priority: ${priority.toUpperCase()}</div>
+                                        <div class="text-xs">Status: ${status.toUpperCase()}</div>
+                                    </div>
+                                    ${status === 'scheduled' ? `
+                                        <button 
+                                            onclick="cancelScheduledCall('${call.schedule_id}')"
+                                            class="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    scheduledContainer.innerHTML = callsHTML;
+                } else {
+                    scheduledContainer.innerHTML = '<div class="text-sm text-gray-500">No scheduled calls</div>';
+                }
+            } catch (error) {
+                document.getElementById('scheduledCalls').innerHTML = '<div class="text-sm text-red-500">Error loading scheduled calls</div>';
+            }
+        }
+
+        // Cancel scheduled call
+        async function cancelScheduledCall(scheduleId) {
+            try {
+                const response = await fetch(`/cancel_call/${scheduleId}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showScheduleStatus('Call cancelled successfully', 'success');
+                    loadScheduledCalls(); // Refresh the list
+                } else {
+                    showScheduleStatus(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showScheduleStatus(`Error cancelling call: ${error.message}`, 'error');
+            }
         }
 
         // Load call notes
@@ -156,15 +555,13 @@
                 
                 const notesContainer = document.getElementById('recentNotes');
                 
-                if (notes.length > 0) {
-                    const recentNotes = notes.slice(0, 5); // Show 5 most recent
+                if (notes && notes.length > 0) {
                     let notesHTML = '';
-                    
-                    recentNotes.forEach(note => {
-                        const timestamp = new Date(note.timestamp).toLocaleString();
+                    notes.slice(0, 5).forEach(note => {
                         const patientName = note.patient_info?.name || 'Unknown Patient';
-                        const phoneNumber = note.phone_number || 'No phone';
+                        const phoneNumber = note.phone_number || 'No number';
                         const reason = note.patient_info?.reason_for_visit || 'No reason provided';
+                        const timestamp = new Date(note.timestamp).toLocaleString();
                         
                         notesHTML += `
                             <div class="bg-gray-50 rounded p-3 border-l-4 border-green-500">

@@ -21,6 +21,7 @@ from livekit.agents import (
     RoomInputOptions,
 )
 from livekit.plugins import (
+    deepgram,
     google,
     silero,
     noise_cancellation,
@@ -38,9 +39,14 @@ load_dotenv(dotenv_path=str(env_path))
 
 # Load all required environment variables
 outbound_trunk_id = os.getenv("SIP_OUTBOUND_TRUNK_ID")
+deepgram_api_key = os.getenv("GOOGLE_API_KEY")
 google_api_key = os.getenv("GOOGLE_API_KEY")
 
 # Validate required environment variables
+if not deepgram_api_key:
+    logger.error("DEEPGRAM_API_KEY is required")
+    raise ValueError("DEEPGRAM_API_KEY environment variable is required")
+
 if not google_api_key:
     logger.error("GOOGLE_API_KEY is required")
     raise ValueError("GOOGLE_API_KEY environment variable is required")
@@ -55,43 +61,56 @@ class OutboundCaller(Agent):
     ):
         super().__init__(
             instructions=f"""
-            You are a pre-visit hospital call agent. Keep calls thorough but focused - aim for 3-4 minutes maximum.
+            You are a professional medical intake specialist conducting pre-visit screening calls. 
+            Follow medical interview protocols and generate comprehensive clinical documentation.
             
-            CRITICAL: You have conversation memory. Use the record_patient_info tool IMMEDIATELY when patient provides information.
-            Don't ask for information they've already given you.
+            MEDICAL INTERVIEW PROTOCOL - STRUCTURED REPORTING (Maximum 20 questions):
             
-            Collect these essential items:
-            1. Patient name and appointment date
-            2. Main reason for visit (symptoms)
-            3. Current medications
-            4. Emergency contact name and phone
+            Your responses must follow this EXACT format for the final summary:
             
-            ADDITIONAL SYMPTOMS & INFORMATION:
-            - After getting the main reason for visit, ask: "Are there any other symptoms or health concerns you'd like to mention?"
-            - Listen carefully and record any additional symptoms using record_patient_info with info_type "additional_symptoms"
-            - Ask: "Is there anything else you think would be helpful for the doctor to know before your visit?"
-            - Record any additional information using record_patient_info with info_type "additional_info"
+            ### Primary concern:
+            [Collect and list the primary concern/chief complaint the patient is having]
             
-            FORBIDDEN TOPICS - DO NOT ASK ABOUT:
-            - Family medical history
-            - Insurance information
-            - Previous surgeries
-            - Special accommodations
-            - Any other information not in the essential items
+            ### History of Present Illness (HPI):
+            [Probe deeply to collect comprehensive HPI. Ask about: when it started, progression, triggers, relieving factors, severity, timing, duration, associated symptoms]
             
-            WORKFLOW:
-            - Greet briefly
-            - Ask for name and appointment date
-            - Ask for main symptoms/reason for visit
-            - Ask for additional symptoms/concerns
-            - Ask for current medications
-            - Ask for emergency contact
-            - Ask if there's anything else to share
-            - Use summarize_and_confirm tool
-            - End call after confirmation
+            ### Relevant Medical History (from EHR):
+            [Extract relevant past medical conditions, surgeries, or family history that relates to current complaint]
             
-            Be professional but conversational. Use record_patient_info tool after each answer.
-            If the patient wants to speak to a human agent, use the transfer_call tool.
+            ### Medications (from EHR and interview):
+            [Document current medications, dosages, allergies, and any new medications mentioned]
+            
+            INTERVIEW STRATEGY:
+            - Ask focused questions to fill each section completely
+            - Use record_patient_info tool for each piece of information
+            - Prioritize information that fits these 4 sections
+            - Maximum 20 questions to complete all sections
+            - Be thorough but respectful of patient's time
+            
+            CRITICAL RULES:
+            - Ask only ONE question at a time
+            - Use medical terminology when appropriate
+            - Record ALL information using record_patient_info tool with proper subcategories
+            - Focus on gathering information for the 4 structured sections
+            - End with summarize_and_confirm when complete
+            
+            DATA RECORDING INSTRUCTIONS:
+            - Use record_patient_info with info_type="chief_complaint" for main concern
+            - Use record_patient_info with info_type="hpi" and subcategory="onset" for when it started
+            - Use record_patient_info with info_type="hpi" and subcategory="quality" for pain description
+            - Use record_patient_info with info_type="hpi" and subcategory="severity" for pain scale
+            - Use record_patient_info with info_type="hpi" and subcategory="timing" for when it occurs
+            - Use record_patient_info with info_type="hpi" and subcategory="radiation" for pain spread
+            - Use record_patient_info with info_type="medications" for current medications
+            - Use record_patient_info with info_type="allergies" for allergies
+            - Use record_patient_info with info_type="pmh" for past medical history
+            - Use record_patient_info with info_type="family" for family history
+            
+            TOOLS TO USE:
+            - record_patient_info: Record each piece of information immediately with proper subcategories
+            - summarize_and_confirm: Generate final summary and confirmation
+            - end_call: End call after confirmation
+            - transfer_call: If patient requests human agent
             
             The patient's name is {name}. Their appointment is on {appointment_time}.
             """
@@ -100,16 +119,42 @@ class OutboundCaller(Agent):
         self.participant: rtc.RemoteParticipant | None = None
         self.dial_info = dial_info
         
-        # Store patient information during the call
+        # Enhanced patient information structure for medical reports
         self.patient_info = {
             "name": "",
             "appointment_date": "",
-            "reason_for_visit": "",
+            "chief_complaint": "",
+            "history_of_present_illness": {
+                "onset": "",
+                "provocation": "",
+                "quality": "",
+                "radiation": "",
+                "severity": "",
+                "timing": "",
+                "duration": ""
+            },
+            "review_of_systems": {
+                "constitutional": "",
+                "cardiovascular": "",
+                "respiratory": "",
+                "gastrointestinal": "",
+                "musculoskeletal": "",
+                "neurological": "",
+                "psychiatric": "",
+                "pertinent_negatives": []
+            },
             "medications": "",
-            "emergency_contact": "",
-            "additional_symptoms": "",
-            "additional_info": ""
+            "allergies": "",
+            "past_medical_history": "",
+            "social_history": "",
+            "family_history": "",
+            "additional_notes": ""
         }
+        
+        # Track interview progress
+        self.interview_phase = "identification"
+        self.question_count = 0
+        self.max_questions = 20
         
         # Store call summary
         self.call_summary = None
@@ -144,7 +189,7 @@ class OutboundCaller(Agent):
 
         job_ctx = get_job_context()
         try:
-            await job_ctx.api.sip.transfer_sip_participant(
+            await ctx.api.sip.transfer_sip_participant(
                 api.TransferSIPParticipantRequest(
                     room_name=job_ctx.room.name,
                     participant_identity=self.participant.identity,
@@ -170,13 +215,14 @@ class OutboundCaller(Agent):
             "patient_info": self.patient_info,
             "call_duration": "completed",
             "status": "call_ended",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "question_count": self.question_count
         }
         
         logger.info(f"Final call summary: {final_summary}")
         
-        # Save call notes to file
-        await self.save_call_notes(final_summary)
+        # Save professional medical report to file
+        await self.save_medical_report(final_summary)
         
         # let the agent finish speaking
         await ctx.wait_for_playout()
@@ -193,11 +239,12 @@ class OutboundCaller(Agent):
                 "patient_info": self.patient_info.copy(),
                 "call_duration": "in_progress",
                 "status": "no_summary_generated",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "question_count": self.question_count
             }
 
-    async def save_call_notes(self, call_summary):
-        """Save call notes to a JSON file"""
+    async def save_medical_report(self, call_summary):
+        """Save professional medical report to a TXT file"""
         try:
             # Create call_notes directory if it doesn't exist
             import pathlib
@@ -207,41 +254,153 @@ class OutboundCaller(Agent):
             # Generate filename with timestamp and phone number
             phone_number = self.participant.identity if self.participant else "unknown"
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"call_notes_{phone_number}_{timestamp}.json"
+            filename = f"medical_report_{phone_number}_{timestamp}.txt"
             filepath = notes_dir / filename
             
-            # Prepare call notes data
-            call_notes = {
-                "phone_number": phone_number,
-                "timestamp": call_summary["timestamp"],
-                "call_duration": call_summary["call_duration"],
-                "status": call_summary["status"],
-                "patient_info": call_summary["patient_info"],
-                "agent_notes": f"Call completed successfully. Patient: {call_summary['patient_info'].get('name', 'Unknown')}",
-                "priority": "normal"
-            }
+            # Generate professional medical report
+            medical_report = self.generate_medical_report()
             
-            # Save to JSON file
+            # Create comprehensive text report
+            text_report = f"""
+{medical_report}
+
+CALL INFORMATION:
+Phone Number: {phone_number}
+Call Date: {call_summary["timestamp"]}
+Call Duration: {call_summary["call_duration"]}
+Call Status: {call_summary["status"]}
+Questions Asked: {call_summary["question_count"]}
+Report Type: Pre-visit Medical Screening
+Priority: Normal
+
+PATIENT SUMMARY:
+Name: {call_summary["patient_info"].get("name", "Not provided")}
+Appointment Date: {call_summary["patient_info"].get("appointment_date", "Not provided")}
+Chief Complaint: {call_summary["patient_info"].get("chief_complaint", "Not specified")}
+
+NOTES:
+This medical intake report was generated during a pre-visit screening call. The information collected helps healthcare providers prepare for the patient's appointment by understanding their current symptoms, medical history, and medication needs. All information should be verified during the actual medical visit.
+
+Report generated by AI Medical Intake Specialist
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """
+            
+            # Save to TXT file
             with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(call_notes, f, indent=2, ensure_ascii=False)
+                f.write(text_report.strip())
             
-            logger.info(f"Call notes saved to: {filepath}")
+            logger.info(f"Medical report saved to: {filepath}")
             return str(filepath)
             
         except Exception as e:
-            logger.error(f"Error saving call notes: {e}")
+            logger.error(f"Error saving medical report: {e}")
             return None
 
+    def generate_medical_report(self):
+        """Generate a professional medical report in paragraph format"""
+        
+        # Build HPI paragraph
+        hpi_parts = []
+        if self.patient_info['history_of_present_illness']['onset']:
+            hpi_parts.append(f"The patient reports that symptoms {self.patient_info['history_of_present_illness']['onset']}")
+        if self.patient_info['history_of_present_illness']['quality']:
+            hpi_parts.append(f"The patient describes the pain as {self.patient_info['history_of_present_illness']['quality']}")
+        if self.patient_info['history_of_present_illness']['severity']:
+            hpi_parts.append(f"Pain severity is rated {self.patient_info['history_of_present_illness']['severity']}")
+        if self.patient_info['history_of_present_illness']['timing']:
+            hpi_parts.append(f"The pain {self.patient_info['history_of_present_illness']['timing']}")
+        if self.patient_info['history_of_present_illness']['radiation']:
+            hpi_parts.append(f"Pain radiates {self.patient_info['history_of_present_illness']['radiation']}")
+        
+        hpi_text = '. '.join(hpi_parts) if hpi_parts else 'Limited information available about the history of present illness.'
+        
+        # Build medical history paragraph
+        medical_history_parts = []
+        if self.patient_info['past_medical_history']:
+            medical_history_parts.append(f"Past medical history includes {self.patient_info['past_medical_history']}")
+        if self.patient_info['family_history']:
+            medical_history_parts.append(f"Family history reveals {self.patient_info['family_history']}")
+        
+        medical_history_text = '. '.join(medical_history_parts) if medical_history_parts else 'No significant past medical history reported.'
+        
+        # Build medications paragraph
+        medications_parts = []
+        if self.patient_info['medications']:
+            medications_parts.append(f"Current medications include {self.patient_info['medications']}")
+        if self.patient_info['allergies']:
+            medications_parts.append(f"The patient reports {self.patient_info['allergies']}")
+        
+        medications_text = '. '.join(medications_parts) if medications_parts else 'No medications reported.'
+        
+        report = f"""
+PRE-VISIT MEDICAL INTAKE REPORT
+
+Patient Information:
+Patient Name: {self.patient_info['name'] or 'Not provided'}
+Appointment Date: {self.patient_info['appointment_date'] or 'Not provided'}
+Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+Primary Concern:
+{self.patient_info['chief_complaint'] or 'Not specified'}
+
+History of Present Illness (HPI):
+{hpi_text}
+
+Relevant Medical History:
+{medical_history_text}
+
+Current Medications and Allergies:
+{medications_text}
+
+Interview Summary:
+This pre-visit screening was conducted to gather essential medical information. The patient provided details about their current symptoms, medical history, and medications to help prepare for their upcoming appointment.
+
+Report Details:
+Questions Asked: {self.question_count}
+Interview Status: {self.interview_phase}
+        """
+        return report.strip()
+
     @function_tool()
-    async def record_patient_info(self, ctx: RunContext, info_type: str, value: str):
-        """Record specific patient information during the call
+    async def record_patient_info(self, ctx: RunContext, info_type: str, value: str, subcategory: str = None):
+        """Record specific patient information during the medical interview
         
         Args:
-            info_type: Type of information (name, appointment_date, reason_for_visit, medications, emergency_contact, additional_symptoms, additional_info)
+            info_type: Type of information (name, appointment_date, chief_complaint, hpi, ros, medications, allergies, pmh, social, family, additional)
             value: The information provided by the patient
+            subcategory: For structured data like HPI or ROS (onset, provocation, quality, etc.)
         """
-        if info_type in self.patient_info:
-            self.patient_info[info_type] = value
+        try:
+            if info_type == "name":
+                self.patient_info["name"] = value
+            elif info_type == "appointment_date":
+                self.patient_info["appointment_date"] = value
+            elif info_type == "chief_complaint":
+                self.patient_info["chief_complaint"] = value
+            elif info_type == "hpi" and subcategory:
+                if subcategory in self.patient_info["history_of_present_illness"]:
+                    self.patient_info["history_of_present_illness"][subcategory] = value
+            elif info_type == "ros" and subcategory:
+                if subcategory in self.patient_info["review_of_systems"]:
+                    self.patient_info["review_of_systems"][subcategory] = value
+            elif info_type == "pertinent_negative":
+                self.patient_info["review_of_systems"]["pertinent_negatives"].append(value)
+            elif info_type == "medications":
+                self.patient_info["medications"] = value
+            elif info_type == "allergies":
+                self.patient_info["allergies"] = value
+            elif info_type == "pmh":
+                self.patient_info["past_medical_history"] = value
+            elif info_type == "social":
+                self.patient_info["social_history"] = value
+            elif info_type == "family":
+                self.patient_info["family_history"] = value
+            elif info_type == "additional":
+                self.patient_info["additional_notes"] = value
+            else:
+                logger.warning(f"Unknown info_type: {info_type}")
+                return {"status": "error", "message": f"Unknown info_type: {info_type}"}
+            
             logger.info(f"Recorded {info_type}: {value} for {self.participant.identity}")
             return {
                 "status": "info_recorded",
@@ -249,66 +408,77 @@ class OutboundCaller(Agent):
                 "value": value,
                 "all_info": self.patient_info
             }
-        else:
-            logger.warning(f"Unknown info_type: {info_type}")
-            return {"status": "error", "message": f"Unknown info_type: {info_type}"}
+        except Exception as e:
+            logger.error(f"Error recording patient info: {e}")
+            return {"status": "error", "message": f"Error recording info: {str(e)}"}
 
     @function_tool()
     async def summarize_and_confirm(self, ctx: RunContext):
-        """Summarize all collected information and ask patient to confirm"""
-        summary = f"""
-        Let me summarize what we've collected:
+        """Generate comprehensive medical summary and ask patient to confirm"""
         
-        Name: {self.patient_info['name'] or 'Not provided'}
-        Appointment Date: {self.patient_info['appointment_date'] or 'Not provided'}
-        Reason for Visit: {self.patient_info['reason_for_visit'] or 'Not provided'}
-        Additional Symptoms: {self.patient_info['additional_symptoms'] or 'None mentioned'}
-        Current Medications: {self.patient_info['medications'] or 'Not provided'}
-        Emergency Contact: {self.patient_info['emergency_contact'] or 'Not provided'}
-        Additional Information: {self.patient_info['additional_info'] or 'None provided'}
+        # Generate professional medical report
+        medical_report = self.generate_medical_report()
         
-        Is this information correct? If yes, I'll end the call. If no, please let me know what needs to be corrected.
+        # Create patient-friendly summary using structured format
+        patient_summary = f"""
+        Let me summarize what we've collected for your medical visit:
+        
+        **Primary Concern:** {self.patient_info['chief_complaint'] or 'Not provided'}
+        
+        **History of Illness:** {self.patient_info['history_of_present_illness']['onset'] or 'Not specified'}{', ' + self.patient_info['history_of_present_illness']['severity'] if self.patient_info['history_of_present_illness']['severity'] else ''}{', ' + self.patient_info['history_of_present_illness']['duration'] if self.patient_info['history_of_present_illness']['duration'] else ''}
+        
+        **Medical History:** {self.patient_info['past_medical_history'] or 'None reported'}
+        **Current Medications:** {self.patient_info['medications'] or 'None reported'}
+        **Allergies:** {self.patient_info['allergies'] or 'None reported'}
+        
+        **Questions Asked:** {self.question_count} out of {self.max_questions}
+        
+        Is this information complete and accurate? If yes, I'll end the call. If anything needs correction, please let me know.
         """
         
-        logger.info(f"Summarizing call for {self.participant.identity}: {self.patient_info}")
+        logger.info(f"Summarizing medical interview for {self.participant.identity}: {self.question_count} questions asked")
         
         # Store the summary for later retrieval
         self.call_summary = {
             "patient_info": self.patient_info.copy(),
             "call_duration": "in_progress",
             "status": "summary_generated",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "question_count": self.question_count,
+            "medical_report": medical_report
         }
         
         return {
             "status": "summary_ready",
-            "summary": summary,
+            "summary": patient_summary,
             "patient_info": self.patient_info,
-            "call_summary": self.call_summary
+            "call_summary": self.call_summary,
+            "question_count": self.question_count
         }
 
     @function_tool()
     async def save_notes(self, ctx: RunContext):
-        """Save current call notes to file"""
+        """Save current medical report to TXT file"""
         try:
             current_summary = {
                 "patient_info": self.patient_info.copy(),
                 "call_duration": "in_progress",
                 "status": "notes_saved",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "question_count": self.question_count
             }
             
-            filepath = await self.save_call_notes(current_summary)
+            filepath = await self.save_medical_report(current_summary)
             if filepath:
                 return {
                     "status": "notes_saved",
                     "filepath": filepath,
-                    "message": "Call notes have been saved"
+                    "message": "Medical report has been saved as TXT file"
                 }
             else:
                 return {
                     "status": "error",
-                    "message": "Failed to save call notes"
+                    "message": "Failed to save medical report"
                 }
         except Exception as e:
             logger.error(f"Error in save_notes: {e}")
@@ -323,6 +493,17 @@ class OutboundCaller(Agent):
         logger.info(f"detected answering machine for {self.participant.identity}")
         await self.hangup()
 
+    def update_interview_phase(self, new_phase: str):
+        """Update the current interview phase"""
+        self.interview_phase = new_phase
+        logger.info(f"Interview phase updated to: {new_phase}")
+
+    def increment_question_count(self):
+        """Increment the question counter"""
+        self.question_count += 1
+        if self.question_count >= self.max_questions:
+            logger.info(f"Maximum questions ({self.max_questions}) reached")
+        return self.question_count
 
 async def entrypoint(ctx: JobContext):
     logger.info(f"connecting to room {ctx.room.name}")
@@ -367,20 +548,34 @@ async def entrypoint(ctx: JobContext):
         
     participant_identity = phone_number = dial_info["phone_number"]
 
-    # Initialize the pre-visit screening agent
+    # Initialize the professional medical intake agent
     agent = OutboundCaller(
         name="Patient",  # Generic name since we'll get it from the patient
         appointment_time="upcoming appointment",
         dial_info=dial_info,
     )
 
+    # Optimized session configuration for minimal delays
     session = AgentSession(
-        vad=silero.VAD.load(),
-        stt=google.STT(languages=["en-US"]),
-        tts=google.TTS(language="en-US"),
+        vad=silero.VAD.load(
+            activation_threshold=0.25,  # Even lower threshold for faster detection
+            min_speech_duration=0.03,  # Very short minimum speech duration (30ms)
+            min_silence_duration=0.15,  # Shorter silence duration (150ms)
+            prefix_padding_duration=0.05,  # Minimal prefix padding (50ms)
+            max_buffered_speech=20.0,  # Reduced buffer for faster processing
+            force_cpu=False,  # Use GPU if available for faster processing
+        ),
+        stt=deepgram.STT(
+            model="nova-3",
+            language="en-US",
+            endpointing_ms=15,  # Faster endpointing
+        ),
+        tts=deepgram.TTS(
+            model="aura-asteria-en",
+        ),
         llm=google.LLM(
-            model="gemini-2.0-flash-exp",
-            temperature=0.8,
+            model="gemini-1.5-flash",  # Supports function calling with higher quotas
+            temperature=0.7,  # Slightly lower for more consistent medical interviewing
             api_key=google_api_key,
         ),
         # Allow the LLM to generate a response while waiting for the end of turn
@@ -391,12 +586,46 @@ async def entrypoint(ctx: JobContext):
     @session.on("user_message")
     def on_user_message(message):
         logger.info(f"User said: {message.text}")
-        # Generate a response to what the user said
+        # Increment question count for each user response
+        agent.increment_question_count()
+        
+        # Generate a response following medical interview protocol
         asyncio.create_task(
             session.generate_reply(
-                instructions=f"Respond briefly to: '{message.text}'. Ask only the next essential question. Keep responses under 15 seconds."
+                instructions=f"""
+                Respond to: '{message.text}' following medical interview protocol.
+                
+                Current phase: {agent.interview_phase}
+                Questions asked: {agent.question_count}/{agent.max_questions}
+                
+                - Ask only ONE focused medical question
+                - Use record_patient_info tool to capture information
+                - Progress through interview phases systematically
+                - Keep responses professional and under 15 seconds
+                - If approaching 20 questions, prepare to summarize
+                """
             )
         )
+    
+    # Add error handling for rate limits and other errors
+    @session.on("error")
+    def on_error(error):
+        if "429" in str(error) or "quota" in str(error).lower():
+            logger.warning("Rate limit hit, waiting before retry...")
+            # The agent will automatically retry after a delay
+        elif "function calling is not enabled" in str(error).lower():
+            logger.error("Model doesn't support function calling - this will break the agent")
+        else:
+            logger.error(f"Session error: {error}")
+    
+    # Add connection status monitoring
+    @session.on("connected")
+    def on_connected():
+        logger.info("Agent session connected successfully")
+    
+    @session.on("disconnected")
+    def on_disconnected():
+        logger.info("Agent session disconnected")
 
     # start the session first before dialing, to ensure that when the user picks up
     # the agent does not miss anything the user says
@@ -430,10 +659,16 @@ async def entrypoint(ctx: JobContext):
 
         agent.set_participant(participant)
 
-        # Start the conversation with an initial greeting
-        logger.info("Starting conversation with initial greeting")
+        # Start the conversation with professional medical intake greeting
+        logger.info("Starting professional medical intake interview")
         await session.generate_reply(
-            instructions="Say briefly: 'Hi, this is your pre-visit screening call. I'm here to collect some information to help prepare for your appointment. Can you confirm your name?' Keep it under 15 seconds and be friendly."
+            instructions="""
+            Say briefly and professionally: 
+            "Hello, this is your pre-visit medical intake call. I'm here to collect important medical information to help prepare for your appointment. 
+            To begin, can you please confirm your full name and the date of your upcoming appointment?"
+            
+            Keep it professional, friendly, and under 20 seconds. This is the first question of the medical interview.
+            """
         )
 
     except api.TwirpError as e:
