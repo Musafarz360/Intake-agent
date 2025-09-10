@@ -51,6 +51,10 @@ A professional AI-powered medical intake system that conducts pre-visit screenin
    pip install -r requirements.txt
    ```
 
+3. **Install LiveKit CLI (required by the web UI to dispatch calls)**
+   - Download and install the `lk` CLI from the LiveKit docs (`https://docs.livekit.io/cloud/agents/dispatching/`).
+   - Ensure `lk` is available on your PATH (verify with `lk --help`).
+
 3. **Set up environment variables**
    ```bash
    cp .env.example .env.local
@@ -93,6 +97,7 @@ DEEPGRAM_API_KEY=your_deepgram_api_key
 3. **Access the Web UI**
    - Open: `http://localhost:5000`
    - Make immediate calls or schedule future calls
+    - Note: The scheduler and patient DB are in-memory (dev-friendly). Restarting the server clears them.
 
 ### **Making Medical Intake Calls**
 
@@ -161,12 +166,12 @@ Interview Status: [Phase]
 ### **VAD Optimization**
 ```python
 vad=silero.VAD.load(
-    activation_threshold=0.25,      # Faster detection
-    min_speech_duration=0.03,      # 30ms minimum
-    min_silence_duration=0.15,     # 150ms silence
-    prefix_padding_duration=0.05,  # 50ms padding
-    max_buffered_speech=20.0,      # Reduced buffer
-    force_cpu=False,                # GPU acceleration
+    activation_threshold=0.25,
+    min_speech_duration=0.08,
+    min_silence_duration=0.25,
+    prefix_padding_duration=0.06,
+    max_buffered_speech=20.0,
+    force_cpu=False,
 )
 ```
 
@@ -175,14 +180,14 @@ vad=silero.VAD.load(
 stt=deepgram.STT(
     model="nova-3",           # High accuracy
     language="en-US",         # English
-    endpointing_ms=15,        # Fast endpointing
+    endpointing_ms=85,        # Balanced latency
 )
 ```
 
 ### **TTS Configuration**
 ```python
 tts=deepgram.TTS(
-    model="aura-asteria-en",  # Natural voice
+    model="aura-luna-en",  # Natural voice (matches code)
 )
 ```
 
@@ -245,6 +250,10 @@ tts=deepgram.TTS(
 4. **Connection Issues**
    - Error: "Failed to connect to Deepgram"
    - Solution: Check internet connection and API keys
+
+5. **LiveKit CLI not found**
+   - Error: Web UI call dispatch fails with command error
+   - Solution: Install `lk` CLI and ensure it is in your PATH
 
 ### **Performance Optimization**
 - **GPU Acceleration**: Set `force_cpu=False` for faster VAD

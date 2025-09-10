@@ -1,0 +1,14 @@
+{
+  "name": "General Intake – Adult Primary Care",
+  "specialty": "Family Medicine",
+  "opening": "Hello, this is intake agent calling from city hospital regarding your upcoming appointment with Dr. Kevin. I’d like to ask a few brief questions to prepare your chart. Is now a good time?",
+  "required_questions": [
+    "What is the primary reason or concern for your visit?",
+    "When did this issue start?",
+    "How has it changed since it began (improving, worsening, unchanged)?",
+    "On a scale of 0–10, how severe is it?"
+  ],
+  "follow_up_questions": [],
+  "closing": "Thank you. I’ll share this with your clinician so they’re prepared for your visit. If your symptoms suddenly worsen, such as severe chest pain, trouble breathing, or new neurological symptoms, please seek urgent care. We look forward to seeing yo. Have a great day.",
+  "id": "b9d952f4-1a92-47b1-8c8c-e47cfa054e04"
+}
